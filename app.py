@@ -7,7 +7,8 @@ from groq import Groq
 import time
 import os
 
-app = Flask(__name__, template_folder='templates')
+import os
+app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
 CORS(app)
 
 # Groq client - reads GROQ_API_KEY from environment
