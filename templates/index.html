@@ -777,13 +777,38 @@
         // ─────────────────────────────────────────────
         const categoryColors = { Engineering: '#6366f1', Health: '#10b981', Sciences: '#8b5cf6', Business: '#f59e0b', Arts: '#ec4899', 'Social Sciences': '#06b6d4', Agriculture: '#22c55e', Education: '#f97316' };
 
-        function renderResults(results) {
+function renderResults(results) {
             const container = document.getElementById('results-container');
             if (!results || !results.length) {
                 container.innerHTML = `<div class="col-span-2 text-center p-12">
-                    <i data-lucide="compass" class="w-16 h-16 mx-auto mb-4 text-slate-300 dark:text-slate-600"></i>
-                    <p class="text-slate-500 dark:text-slate-400 font-medium">No matching courses found</p>
-                    <p class="text-sm text-slate-400 dark:text-slate-500 mt-1">Try adjusting your filters or search term</p>
+                    <div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-red-100 to-orange-100 dark:from-red-900/30 dark:to-orange-900/30 mb-6">
+                        <i data-lucide="alert-circle" class="w-10 h-10 text-red-400"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-3">No Matches Found</h3>
+                    <p class="text-slate-500 dark:text-slate-400 mb-6 max-w-sm mx-auto leading-relaxed">
+                        Don't worry — this happens when your current grades or JAMB score don't yet meet the minimum requirements for available courses.
+                    </p>
+                    <div class="max-w-sm mx-auto text-left space-y-3 mb-8">
+                        <div class="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+                            <i data-lucide="check-circle" class="w-5 h-5 text-blue-500 mt-0.5 shrink-0"></i>
+                            <p class="text-sm text-slate-600 dark:text-slate-400">Make sure <strong>English and Mathematics</strong> both have at least a <strong>C6</strong> grade</p>
+                        </div>
+                        <div class="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+                            <i data-lucide="check-circle" class="w-5 h-5 text-blue-500 mt-0.5 shrink-0"></i>
+                            <p class="text-sm text-slate-600 dark:text-slate-400">A JAMB score of <strong>200 and above</strong> gives you access to more institutions</p>
+                        </div>
+                        <div class="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800">
+                            <i data-lucide="check-circle" class="w-5 h-5 text-blue-500 mt-0.5 shrink-0"></i>
+                            <p class="text-sm text-slate-600 dark:text-slate-400">Consider a <strong>JAMB resit</strong> to improve your score and unlock more course options</p>
+                        </div>
+                        <div class="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-100 dark:border-amber-800">
+                            <i data-lucide="lightbulb" class="w-5 h-5 text-amber-500 mt-0.5 shrink-0"></i>
+                            <p class="text-sm text-slate-600 dark:text-slate-400">You can also ask our <strong>Career Assistant</strong> below for advice on what to do next</p>
+                        </div>
+                    </div>
+                    <button onclick="resetApp()" class="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Try Again
+                    </button>
                 </div>`;
                 lucide.createIcons();
                 return;
