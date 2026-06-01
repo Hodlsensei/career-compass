@@ -504,12 +504,12 @@
                     </span>
                     <select onchange="userData.grades['${s.id}']=parseInt(this.value); checkGradesError()"
                         class="text-sm px-2 py-1 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 outline-none cursor-pointer">
-                        <option value="0">-</option>
-                        <option value="5">A1</option>
-                        <option value="4">B2-B3</option>
-                        <option value="3">C4-C6</option>
-                        <option value="2">D7</option>
-                        <option value="1">E8</option>
+                        <option value="0">— Select —</option>
+                        <option value="5">A1 ✓</option>
+                        <option value="4">B2 / B3 ✓</option>
+                        <option value="3">C4 / C6 ✓</option>
+                        <option value="2">D7 ✗ (Fail)</option>
+                        <option value="1">E8 ✗ (Fail)</option>
                     </select>
                 </div>`).join('');
             lucide.createIcons();
@@ -695,6 +695,37 @@
         // ─────────────────────────────────────────────
         // FETCH RESULTS
         // ─────────────────────────────────────────────
+        function startLoadingAnimation() {
+            const steps = [
+                { pct: 15, step: 'Step 1 of 4: Checking your grades & subjects...' },
+                { pct: 30, step: 'Step 2 of 4: Matching courses to your profile...' },
+                { pct: 55, step: 'Step 3 of 4: Searching available institutions...' },
+                { pct: 75, step: 'Step 4 of 4: Verifying cutoffs & tuition fees...' },
+                { pct: 90, step: 'Almost done! Sorting your best matches...' },
+            ];
+
+            const titles = [
+                'Analyzing your academic profile...',
+                'Finding courses that match you...',
+                'Searching suitable institutions for you...',
+                'Verifying university cutoff marks...',
+                'Sorting your top matches...',
+            ];
+
+            let i = 0;
+            const interval = setInterval(() => {
+                if (i >= steps.length) { clearInterval(interval); return; }
+                const bar = document.getElementById('loading-bar');
+                const stepEl = document.getElementById('loading-step');
+                const titleEl = document.getElementById('loading-title');
+                if (!bar || !stepEl || !titleEl) { clearInterval(interval); return; }
+                bar.style.width = steps[i].pct + '%';
+                stepEl.textContent = steps[i].step;
+                titleEl.textContent = titles[i];
+                i++;
+            }, 2500);
+        }
+
         async function getResults() {
             currentStep = 3;
             document.querySelectorAll('.step-section').forEach(s => s.classList.add('hidden'));
@@ -706,10 +737,27 @@
                     <div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 shadow-lg shadow-blue-500/30 mb-6 animate-spin" style="animation-duration: 2s;">
                         <i data-lucide="compass" class="w-10 h-10 text-white"></i>
                     </div>
-                    <p class="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-2">Finding your perfect courses...</p>
-                    <p class="text-sm text-slate-500 dark:text-slate-400">Analyzing your grades and interests</p>
+                    <p class="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-2" id="loading-title">Finding your perfect courses...</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" id="loading-subtitle">Finding the best schools for your profile</p>
+                    <div class="max-w-xs mx-auto">
+                        <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 mb-3">
+                            <div id="loading-bar" class="h-2 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <p class="text-xs text-slate-400 dark:text-slate-500" id="loading-step">Step 1 of 4: Checking your grades...</p>
+                    </div>
+                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-6 italic">Please wait while we match you with<br>the right institutions for your score</p>
+                    <div class="max-w-xs mx-auto">
+                        <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 mb-3">
+                            <div id="loading-bar" class="h-2 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <p class="text-xs text-slate-400 dark:text-slate-500" id="loading-step">Step 1 of 4: Checking your grades...</p>
+                    </div>
+                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-6 italic">Please wait while we match you with<br>the right institutions for your score</p>
                 </div>`;
             lucide.createIcons();
+            startLoadingAnimation();
+            lucide.createIcons();
+            startLoadingAnimation();
 
             try {
                 const res = await fetch('/recommend', {

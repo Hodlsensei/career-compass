@@ -6,6 +6,7 @@ from flask_cors import CORS
 from groq import Groq
 import time
 import os
+import json
 
 import os
 app = Flask(__name__, template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
@@ -14,7 +15,15 @@ CORS(app)
 # Groq client - reads GROQ_API_KEY from environment
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
+
 # --- COMPREHENSIVE NIGERIAN COURSE DATABASE ---
+# ⚠️  YEARLY UPDATE CHECKLIST (update at the start of each admission season):
+# 1. JAMB cutoff marks        → check jamb.gov.ng (announced March/April yearly)
+# 2. Tuition fees             → check each university's official website
+# 3. New universities         → add any newly accredited institutions
+# 4. Course accreditation     → verify NUC accreditation at nuc.edu.ng
+# 5. Post-UTME requirements   → check each school's official portal
+# Last updated: 2024 admission session
 COURSES = [
     # ========== ENGINEERING ==========
     {
@@ -510,32 +519,48 @@ COURSES = [
 # ─────────────────────────────────────────────
 # SYSTEM PROMPT FOR AI CHATBOT
 # ─────────────────────────────────────────────
-CHATBOT_SYSTEM_PROMPT = """You are Career Compass AI, a knowledgeable and friendly academic advisor specializing in Nigerian university admissions, JAMB/WAEC requirements, and tertiary education.
+CHATBOT_SYSTEM_PROMPT = """You are Career Compass AI, a knowledgeable and friendly academic advisor specializing in Nigerian university admissions, JAMB/WAEC requirements, and tertiary education. You have deep, current knowledge of Nigerian universities and always provide accurate, up-to-date information.
 
 Your role is to:
 1. Help Nigerian students understand their university course options based on their JAMB scores and WAEC grades
-2. Provide accurate, up-to-date advice about Nigerian universities (federal, state, and private), polytechnics, and colleges of education
+2. Provide accurate and current advice about Nigerian universities (federal, state, and private), polytechnics, and colleges of education — including their latest cutoff marks, tuition fees, course durations, and admission requirements
 3. Explain course requirements, career prospects, and admission processes in Nigeria
 4. Discuss JAMB UTME, Post-UTME, Direct Entry, and O'Level requirements
 5. Offer guidance on the best courses based on interests, grades, and career goals
+6. Correct or supplement any outdated school information the app may display, using your current knowledge
 
 Key facts to know:
 - JAMB scores range from 140-400; most universities require 200+; competitive courses (Medicine, Law, Engineering) typically require 250+
-- WAEC grades: A1 (excellent), B2-B3 (very good), C4-C6 (credit/pass), D7-E8-F9 (weak/fail)
-- Universities in Nigeria: federal (UNILAG, UI, ABU, UNN, OAU, UNIBEN etc.), state, and private (Covenant, Babcock, Afe Babalola etc.)
-- Polytechnics offer ND (2 years) and HND (2 years) programs
+- WAEC grades: A1 (excellent), B2-B3 (very good), C4-C6 (credit/pass), D7-E8-F9 (fail — not accepted for admission)
+- English Language and Mathematics are compulsory for ALL courses — minimum C6 required
+- Universities in Nigeria: federal (UNILAG, UI, ABU, UNN, OAU, UNIBEN, FUTA, FUTO, FUNAAB, FUPRE etc.), state, and private (Covenant, Babcock, Afe Babalola, Landmark, Pan-Atlantic etc.)
+- Polytechnics offer ND (2 years) and HND (2 years) programs — good alternatives for lower JAMB scores
 - Colleges of Education offer NCE (3 years) programs
-- Post-UTME is a separate exam universities use to further screen applicants
+- Post-UTME is a separate screening exam used by universities after JAMB
 - Catchment areas are states/regions where universities give admission priority
+- JAMB cutoff marks are announced yearly — always clarify the current year's cutoff when answering
+- Tuition fees vary widely: federal universities (₦30,000–₦60,000), state universities (₦80,000–₦300,000), private universities (₦500,000–₦3,000,000+)
+
+When a student asks about a specific school:
+- Use your current knowledge to give accurate cutoff marks, tuition, course availability, and Post-UTME details
+- If the app showed them a school, verify it is correct and add any important details they should know
+- Always mention if a school requires Post-UTME and approximately what score is needed
+- Mention if the school has catchment area advantages for the student's state
+
+When a student's JAMB score is low (140-199):
+- Be honest but encouraging
+- Suggest polytechnics, colleges of education, or private universities as alternatives
+- Recommend JAMB resit if their score is too low for their dream course
 
 Always be:
 - Encouraging but honest about admission competitiveness
 - Specific about Nigerian institutions, cut-off marks, and requirements
 - Helpful with alternative options if a student's score is low
-- Brief but informative — students need clear, actionable advice
+- Accurate — if you are unsure about a specific current figure, say so and direct them to the school's official website or jamb.gov.ng
 
-Keep responses under 150 words. Use bullet points when listing options. Be warm and motivating."""
+Keep responses under 200 words. Use bullet points when listing options. Be warm and motivating.
 
+IMPORTANT: The app's school database may not reflect the most current admission year. Always use your own knowledge to verify or correct school information when a student asks, and remind them to always confirm final details on jamb.gov.ng or the school's official website."""
 
 @app.route('/')
 def home():
@@ -563,15 +588,17 @@ def chat():
         return jsonify({'error': 'No messages provided'}), 400
 
     # Build context string from user data
+    # Build context string from user data
     context_str = ""
     if user_context.get('jamb'):
-        context_str += f"\n\nStudent context: JAMB score = {user_context['jamb']}"
+        context_str += f"\n\nStudent profile: JAMB score = {user_context['jamb']}"
     if user_context.get('track'):
         context_str += f", WAEC track = {user_context['track']}"
     if user_context.get('interests'):
         context_str += f", Interests = {', '.join(user_context['interests'])}"
     if user_context.get('topMatches'):
-        context_str += f"\nTop matched courses: {', '.join(user_context['topMatches'])}"
+        context_str += f"\nCourses the app matched for this student: {', '.join(user_context['topMatches'])}"
+        context_str += f"\nPlease verify these matches are accurate for the student's JAMB score and suggest corrections if needed."
 
     try:
         formatted_messages = [
@@ -595,65 +622,113 @@ def chat():
         return jsonify({'error': f'AI service error: {str(e)}'}), 500
 
 
+# Cache to avoid repeated Groq calls for same course+score combination
+university_cache = {}
+
+def get_universities_from_groq(course_title, course_category, jamb_score):
+    """Use Groq AI to get accurate current university data for a course"""
+
+    # Return cached result if same course+score was already looked up
+    cache_key = f"{course_title}_{jamb_score}"
+    if cache_key in university_cache:
+        print(f"Cache hit: {cache_key}")
+        return university_cache[cache_key]
+
+    try:
+        prompt = f"""You are a Nigerian university admissions expert with accurate 2024/2025 knowledge.
+
+For the course "{course_title}" ({course_category}), list Nigerian universities and polytechnics that accept a JAMB score of {jamb_score}.
+
+Return ONLY a valid JSON array. No explanation, no markdown, no extra text. Just raw JSON.
+
+Each object must have exactly these fields:
+- "name": full official university name
+- "cutoff": integer JAMB cutoff mark for this course at this school
+- "tuition": current 2024/2025 annual tuition in Naira like "₦250,000"
+- "duration": course duration like "5 Years" or "4 Years" or "2 Years (ND)"
+- "type": one of "university", "polytechnic", or "college"
+- "catchment": array of Nigerian states this school gives priority to, empty array [] if none
+
+Important rules:
+- Only include schools where cutoff is less than or equal to {jamb_score}
+- Use accurate 2024/2025 tuition (federal universities now charge ₦150,000-₦300,000+, private universities ₦1,000,000-₦4,000,000+)
+- Course duration must be accurate for Nigeria (Medicine=6 years, Law=5 years, Engineering=5 years, Sciences=4 years, Business=4 years etc.)
+- Include maximum 6 schools
+- If no schools qualify return empty array []
+
+Return only the JSON array, nothing else."""
+
+        response = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            max_tokens=800,
+            temperature=0.1,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a Nigerian university data expert. You only return valid JSON arrays. Never return explanations or markdown."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        )
+
+        response_text = response.choices[0].message.content.strip()
+
+        # Clean response in case model adds markdown
+        if '```' in response_text:
+            response_text = response_text.split('```')[1]
+            if response_text.startswith('json'):
+                response_text = response_text[4:]
+        response_text = response_text.strip()
+
+        # Find JSON array in response
+        start = response_text.find('[')
+        end = response_text.rfind(']') + 1
+        if start != -1 and end > start:
+            response_text = response_text[start:end]
+
+        universities = json.loads(response_text)
+
+        if not isinstance(universities, list):
+            return []
+
+        # Store in cache
+        university_cache[cache_key] = universities
+        return universities
+
+    except Exception as e:
+        print(f"Groq university lookup error for {course_title}: {e}")
+        return []
+
+
 @app.route('/recommend', methods=['POST'])
 def recommend():
-    time.sleep(0.5)
-
     data = request.json
     user_grades = data.get('grades', {})
     user_interests = data.get('interests', [])
     user_jamb = data.get('jamb', 0)
-    institution_type = data.get('institutionType', 'all')
-    max_tuition = data.get('maxTuition', 0)
-    preferred_duration = data.get('duration', 'any')
 
     results = []
 
     for course in COURSES:
-        # Check compulsory subject grades
         qualified = True
-        for sub in course.get('compulsory_subjects', []):
-            if user_grades.get(sub, 0) < 3:
-                qualified = False
-                break
+
+        # UNIVERSAL RULE: English AND Maths must be at least C6 for ALL courses
+        if user_grades.get('eng', 0) < 3:
+            qualified = False
+        if user_grades.get('math', 0) < 3:
+            qualified = False
+
+        # COURSE-SPECIFIC: All compulsory subjects must be at least C6
+        if qualified:
+            for sub in course.get('compulsory_subjects', []):
+                if user_grades.get(sub, 0) < 3:
+                    qualified = False
+                    break
 
         if not qualified:
-            continue
-
-        # Filter eligible universities
-        eligible_universities = []
-        for uni in course.get('universities', []):
-            # JAMB cutoff check
-            if user_jamb < uni['cutoff']:
-                continue
-
-            # Institution type filter
-            uni_type = uni.get('type', 'university')
-            if institution_type != 'all' and uni_type != institution_type:
-                continue
-
-            # Max tuition filter
-            if max_tuition > 0:
-                tuition_str = uni['tuition'].replace('₦', '').replace(',', '')
-                try:
-                    tuition_val = int(tuition_str)
-                    if tuition_val > max_tuition:
-                        continue
-                except:
-                    pass
-
-            # Duration filter
-            duration_str = uni.get('duration', '')
-            if preferred_duration == 'short' and not any(d in duration_str for d in ['2 Years', '3 Years']):
-                continue
-            elif preferred_duration == 'medium' and '4 Years' not in duration_str:
-                continue
-            elif preferred_duration == 'long' and not any(d in duration_str for d in ['5 Years', '6 Years']):
-                continue
-
-            eligible_universities.append(uni)
-
-        if not eligible_universities:
             continue
 
         # Calculate match score
@@ -671,12 +746,24 @@ def recommend():
             if interest in user_interests:
                 score += 15
 
-        if score >= 20:
-            results.append({
-                **course,
-                "score": score,
-                "universities": eligible_universities
-            })
+        if score < 20:
+            continue
+
+        # Get accurate universities from Groq AI
+        eligible_universities = get_universities_from_groq(
+            course['title'],
+            course['category'],
+            user_jamb
+        )
+
+        if not eligible_universities:
+            continue
+
+        results.append({
+            **course,
+            "score": score,
+            "universities": eligible_universities
+        })
 
     results.sort(key=lambda x: x['score'], reverse=True)
     return jsonify(results)
